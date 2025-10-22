@@ -1,0 +1,5 @@
+NEW_CONNECT_SERVER = https://dash-connect-prd.azure.defra.cloud
+NEW_CONNECT_API_KEY = PwF5wtlzKt9OaHlDKjvRYU8zIhCxgbMw
+#CONNECT_API_KEY ='CEY5dqT29eo4ZNTgkDtMDZjqclk0b0KK'
+OLD_CONNECT_SERVER = https://dap-prd2-connect.azure.defra.cloud/connect
+OLD_CONNECT_API_KEY = og8fBAnO89OwElj1YpjdrCoExVRf46Sy
