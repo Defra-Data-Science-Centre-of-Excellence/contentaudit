@@ -1,0 +1,87 @@
+---
+title: "migration_status"
+format: html
+server: shiny
+---
+
+Obtain the api keys for each connect 
+
+```{r}
+server = "https://dap-prd2-connect.azure.defra.cloud"
+api_key =Sys.getenv("OLD_CONNECT_API_KEY")
+newcnnctserver = "https://dash-connect-prd.azure.defra.cloud"
+newcnntapikey =Sys.getenv("NEW_CONNECT_API_KEY")
+library(contentaudit)
+
+```
+
+Retrieving users and content from old connect
+
+```{r}
+
+oldcnnt_users_content <- contentaudit::fetch_users_content(connect_server = server, connect_api_key = api_key)
+
+```
+
+Retrieving users and content from new connect
+```{r}
+newcnnt_users_content <- contentaudit::fetch_users_content(connect_server = newcnnctserver, connect_api_key = newcnntapikey)
+```
+
+
+Obtain master data 
+```{r}
+new_vars_data <- new_vars(newcnnt_users_content) %>%
+  dplyr::mutate(new_connect = c('new_server'))
+
+old_vars_data <- new_vars(oldcnnt_users_content)  %>%
+  dplyr::mutate(old_connect = c('old_server'))
+
+new_old_migrated_data <- dplyr::full_join(new_vars_data, old_vars_data)
+
+```
+
+Save data 
+```{r}
+migration_data_detected <- contentaudit::detect_migration_and_testapps(new_old_migrated_data, threshold = 0.6)
+
+readr::write_csv(migration_data_detected, "data/migration_data_detected.csv")
+```
+
+Count migrated apps excluding the test apps and a-accounts
+```{r}
+migration_data_detected %>%
+  dplyr::filter(
+    migration == "migrated",
+    contains_test_app_innew == FALSE,
+    a_nona_account == FALSE
+  ) %>%
+  dplyr::count()
+# there are 28 now as 22/10
+```
+
+
+Count number of apps excluding the test apps and a-accounts
+```{r}
+migration_data_detected %>%
+  dplyr::filter(
+    old_connect == "old_server",
+    a_nona_account == FALSE
+  ) %>%
+  dplyr::count()
+
+#there are 312 as of 22/10
+```
+
+Count new apps in new connect
+```{r}
+migration_data_detected %>%
+  dplyr::filter(
+    migration == "new app",
+    contains_test_app_innew == FALSE,
+    a_nona_account == FALSE
+  ) %>%
+  dplyr::count()
+# there are 15 apps 
+```
+

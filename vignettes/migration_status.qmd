@@ -1,0 +1,232 @@
+---
+title: "migration_status"
+format: html
+server: shiny
+---
+
+Retrieving users and content from old connect
+
+```{r}
+
+library(shiny)
+library(connectapi) # Tested with 0.1.0.9031
+
+library(dplyr)
+library(bslib)
+library(echarts4r)
+library(toastui)
+library(purrr)
+library(tidyverse)
+
+server = "https://dap-prd2-connect.azure.defra.cloud"
+api_key =Sys.getenv("OLD_CONNECT_API_KEY")
+
+```
+
+Creating variables
+
+```{r}
+
+fetch_users_content <- function(connect_server = server, connect_api_key = api_key ){
+  
+  old_connect_rsc_client <- connect(
+  server = connect_server,
+  api_key = connect_api_key
+  )
+  
+  apps_usage <- get_usage_shiny(old_connect_rsc_client, limit = Inf)
+  
+  # TO DO: refresh this in the background
+  old_rsc_content <- old_connect_rsc_client %>% 
+    get_content() %>%
+    #mutate(lock = filter(locked == FALSE)) %>%
+    mutate(owner_username = map_chr(owner, "username", .default = NA_character_))
+  
+  apps_published <- old_rsc_content %>%
+    dplyr::select(guid, name, title, created_time, last_deployed_time, app_mode, app_role, owner_username)
+  
+}
+
+new_vars <- function(data){
+  
+  # Named vector of known exceptions
+  department_map <- c(
+  "Naturalengland" = "Natural England")
+
+
+
+  new_var_data1 <- data %>%
+    dplyr::mutate(a_nona_account = str_detect(owner_username, "^a-a"), 
+                  owner_username = str_split(owner_username, "@", simplify = TRUE),
+                  owner_username = str_c(str_to_lower(owner_username[,1]), "@", owner_username[,2]))
+  
+  new_var_data2 <- new_var_data1 %>%
+    dplyr::mutate(department = owner_username %>%
+                    str_split("@", simplify = TRUE) %>%
+                    .[,2] %>%
+                    str_remove("\\.gov\\.uk|\\.org\\.uk|\\.co\\.uk") %>%
+                     str_split("\\.", simplify = TRUE) %>%
+                    .[,1] %>%
+                    str_replace_all("-", " ") %>%
+                    str_to_title() %>%
+                    str_replace_all(fixed(department_map))
+    )
+  
+} 
+
+detect_migration <- function(data, threshold = 0.5) {
+  
+  # Step 1: Tokenize app names
+  data <- data %>%
+    mutate(name_words = str_split(name, "_|-|\\s+"))
+  
+  # Step 2: Create a working copy to track matched old names
+  matched_old_names <- character(0)
+  
+  # Step 3: Compute similarity, migration, and matched names
+  data <- data %>%
+    rowwise() %>%
+    mutate(
+      similarity_score = {
+        if (isTRUE(new_connect == "new_server")) {
+          candidates <- data %>%
+            filter(old_connect == "old_server",
+                   owner_username == owner_username,
+                   app_mode == app_mode,
+                   !(name %in% matched_old_names))
+          
+          new_words <- unlist(cur_data()$name_words)
+          
+          scores <- map_dbl(candidates$name_words, function(old_words) {
+            shared <- intersect(tolower(old_words), tolower(new_words))
+            avg_len <- mean(c(length(old_words), length(new_words)))
+            length(shared) / avg_len
+          })
+          
+          if (length(scores) > 0) max(scores) else NA_real_
+        } else {
+          NA_real_
+        }
+      },
+      matched_old_name = {
+        if (isTRUE(new_connect == "new_server")) {
+          candidates <- data %>%
+            filter(old_connect == "old_server",
+                   owner_username == owner_username,
+                   app_mode == app_mode,
+                   !(name %in% matched_old_names))
+          
+          new_words <- unlist(cur_data()$name_words)
+          
+          scores <- map_dbl(candidates$name_words, function(old_words) {
+            shared <- intersect(tolower(old_words), tolower(new_words))
+            avg_len <- mean(c(length(old_words), length(new_words)))
+            length(shared) / avg_len
+          })
+          
+          if (length(scores) > 0 && max(scores) >= threshold) {
+            best_match <- candidates$name[which.max(scores)]
+            matched_old_names <<- c(matched_old_names, best_match)
+            best_match
+          } else {
+            NA_character_
+          }
+        } else {
+          NA_character_
+        }
+      },
+      matched_new_name = if (isTRUE(new_connect == "new_server")) name else NA_character_,
+      migration = case_when(
+        isTRUE(new_connect == "new_server") & !is.na(matched_old_name) ~ "migrated",
+        isTRUE(new_connect == "new_server") & similarity_score == 0 ~ "new app",
+        isTRUE(new_connect == "new_server") ~ "not migrated",
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    ungroup()
+  
+  return(data)
+}
+```
+
+
+```{r}
+
+oldcnnt_users_content <- fetch_users_content(connect_server = server, connect_api_key = api_key)
+
+```
+
+```{r}
+newcnnctserver = "https://dash-connect-prd.azure.defra.cloud"
+newcnntapikey =Sys.getenv("NEW_CONNECT_API_KEY")
+newcnnt_users_content <- fetch_users_content(connect_server = newcnnctserver, connect_api_key = newcnntapikey)
+```
+
+```{r}
+new_vars_data <- new_vars(newcnnt_users_content) %>%
+  mutate(new_connect = c('new_server'))
+
+old_vars_data <- new_vars(oldcnnt_users_content)  %>%
+  mutate(old_connect = c('old_server'))
+
+new_old_migrated_data <- full_join(new_vars_data, old_vars_data)
+```
+
+```{r}
+migration_data_detected <- detect_migration(new_old_migrated_data, threshold = 0.6)
+
+```
+
+```{r}
+create_dev_ranking <- function(new_connect_rsc_users, new_connect_rsc_content) {
+  # Filter out locked users
+  active_users <- new_connect_rsc_users %>% filter(locked == FALSE)
+  
+  # Focus on publishers only
+  publishers <- active_users %>% filter(user_role == "publisher")
+  
+  # Count number of apps per publisher
+  app_counts <- new_connect_rsc_content %>%
+    group_by(owner_guid) %>%
+    summarise(app_count = n(), .groups = "drop")
+  
+  # Join with publisher info
+  ranking <- publishers %>%
+    left_join(app_counts, by = c("guid" = "owner_guid")) %>%
+    mutate(app_count =  replace_na(app_count, 0)) %>%
+    arrange(desc(app_count))
+  
+  # Optional: select relevant columns
+  ranking %>% select(username, email, app_count)
+}
+```
+
+
+
+```{r}
+general_metrics <- list(
+  "Onboarded Users" = nrow(old_rsc_users),
+  "Publishers" = nrow(old_publishers),
+  "Deployments" = nrow(old_rsc_content)
+  #"Shiny Apps" = nrow(old_shiny_apps)
+)
+
+general_metrics_cards <- purrr::map(
+  seq_along(general_metrics),
+  function(i) {
+    value_box(
+      theme_color = "secondary",
+      value = general_metrics[[i]],
+      title = names(general_metrics)[[i]]
+    )
+  }
+)
+
+
+```
+
+```{r}
+developers_apps_ranking <- create_dev_ranking(old_rsc_users, old_rsc_content)
+```
+
+
