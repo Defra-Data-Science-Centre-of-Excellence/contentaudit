@@ -19,3 +19,5 @@ Imports:
     shiny,
     tidyr,
     toastui
+URL: https://github.com/gabrielburceadefra/contentaudit
+BugReports: https://github.com/gabrielburceadefra/contentaudit/issues
