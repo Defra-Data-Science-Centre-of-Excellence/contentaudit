@@ -7,5 +7,5 @@ port: 5555
 execute:
   echo: false
 dependencies:
-  - github::yourusername/contentaudit
+  - github::gabrielburceadefra/contentaudit
 ---
