@@ -21,3 +21,6 @@ Imports:
     toastui
 URL: https://github.com/gabrielburceadefra/contentaudit
 BugReports: https://github.com/gabrielburceadefra/contentaudit/issues
+Suggests: 
+    gt,
+    paletteer
