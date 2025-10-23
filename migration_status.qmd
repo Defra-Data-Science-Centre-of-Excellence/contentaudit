@@ -1,8 +1,6 @@
 ---
 title: "Migration Status Report"
-format: html
-execute:
-  echo: false
+numbered: true
 ---
 
 ```{r}

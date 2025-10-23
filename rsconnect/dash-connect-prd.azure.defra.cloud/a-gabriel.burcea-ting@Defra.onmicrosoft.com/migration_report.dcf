@@ -1,0 +1,12 @@
+name: migration_report
+title: Migration Report
+username: a-gabriel.burcea-ting@Defra.onmicrosoft.com
+account: a-gabriel.burcea-ting@Defra.onmicrosoft.com
+server: dash-connect-prd.azure.defra.cloud
+hostUrl: https://dash-connect-prd.azure.defra.cloud/__api__
+appId: 124
+bundleId: 276
+url: https://dash-connect-prd.azure.defra.cloud/content/7635ddf2-36dd-43cc-9368-891631be4873/
+version: 1
+asMultiple: FALSE
+asStatic: TRUE

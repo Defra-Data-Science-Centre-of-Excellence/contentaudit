@@ -1,0 +1,12 @@
+name: migration_status
+title: migration_status
+username: a-gabriel.burcea-ting@Defra.onmicrosoft.com
+account: a-gabriel.burcea-ting@Defra.onmicrosoft.com
+server: dash-connect-prd.azure.defra.cloud
+hostUrl: https://dash-connect-prd.azure.defra.cloud/__api__
+appId: 123
+bundleId: 274
+url: https://dash-connect-prd.azure.defra.cloud/content/8bee543b-1285-42fa-82fd-a1f9a48d3921/
+version: 1
+asMultiple: FALSE
+asStatic: TRUE

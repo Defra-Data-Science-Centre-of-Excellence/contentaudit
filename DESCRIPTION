@@ -15,6 +15,7 @@ Imports:
     dplyr,
     echarts4r,
     httr,
+    lubridate,
     purrr,
     shiny,
     tidyr,
