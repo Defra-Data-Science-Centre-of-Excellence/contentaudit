@@ -12,6 +12,7 @@ RoxygenNote: 7.3.3
 Imports: 
     bslib,
     connectapi,
+    contentaudit,
     dplyr,
     echarts4r,
     httr,
