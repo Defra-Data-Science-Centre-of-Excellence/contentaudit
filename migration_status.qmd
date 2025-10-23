@@ -1,36 +1,42 @@
 ---
-title: "migration_status"
+title: "Migration Status Report"
 format: html
-server: shiny
+execute:
+  echo: false
 ---
 
-Obtain the api keys for each connect 
-
 ```{r}
+#| include: false
+#| message: false
+#| warning: false
+
+# Obtain the api keys for each connect
 server = "https://dap-prd2-connect.azure.defra.cloud"
 api_key =Sys.getenv("OLD_CONNECT_API_KEY")
 newcnnctserver = "https://dash-connect-prd.azure.defra.cloud"
 newcnntapikey =Sys.getenv("NEW_CONNECT_API_KEY")
 library(contentaudit)
+library(dplyr)
 
 ```
 
-Retrieving users and content from old connect
-
-```{r}
+```{r, retrieving-logs-from-servers}
+#| include: false
+#| message: false
+#| warning: false
 
 oldcnnt_users_content <- contentaudit::fetch_users_content(connect_server = server, connect_api_key = api_key)
-
-```
-
-Retrieving users and content from new connect
-```{r}
 newcnnt_users_content <- contentaudit::fetch_users_content(connect_server = newcnnctserver, connect_api_key = newcnntapikey)
+
+
 ```
 
+```{r, obtaining-master-final-data}
+#| include: false
+#| message: false
+#| warning: false
 
-Obtain master data 
-```{r}
+#library(dplyr)
 new_vars_data <- new_vars(newcnnt_users_content) %>%
   dplyr::mutate(new_connect = c('new_server'))
 
@@ -41,16 +47,24 @@ new_old_migrated_data <- dplyr::full_join(new_vars_data, old_vars_data)
 
 ```
 
-Save data 
-```{r}
+```{r, saving-data}
+#| include: false
+#| message: false
+#| warning: false
+
+
+
 migration_data_detected <- contentaudit::detect_migration_and_testapps(new_old_migrated_data, threshold = 0.6)
 
 readr::write_csv(migration_data_detected, "data/migration_data_detected.csv")
 ```
 
-Count migrated apps excluding the test apps and a-accounts
-```{r}
-migration_data_detected %>%
+```{r, spot-migrated}
+#| include: false
+#| message: false
+#| warning: false
+
+spot_migrated <- migration_data_detected %>%
   dplyr::filter(
     migration == "migrated",
     contains_test_app_innew == FALSE,
@@ -60,10 +74,12 @@ migration_data_detected %>%
 # there are 28 now as 22/10
 ```
 
+```{r, old_server_ex_a_accounts}
+#| include: false
+#| message: false
+#| warning: false
 
-Count number of apps excluding the test apps and a-accounts
-```{r}
-migration_data_detected %>%
+old_server_ex_a_accounts <- migration_data_detected %>%
   dplyr::filter(
     old_connect == "old_server",
     a_nona_account == FALSE
@@ -73,9 +89,12 @@ migration_data_detected %>%
 #there are 312 as of 22/10
 ```
 
-Count new apps in new connect
-```{r}
-migration_data_detected %>%
+```{r, new-apps-in-new-connect}
+#| include: false
+#| message: false
+#| warning: false
+
+new_apps_in_new_connect <- migration_data_detected %>%
   dplyr::filter(
     migration == "new app",
     contains_test_app_innew == FALSE,
@@ -85,3 +104,315 @@ migration_data_detected %>%
 # there are 15 apps 
 ```
 
+```{r, new_server_excl_test_app_a_accounts}
+#| include: false
+#| message: false
+#| warning: false
+
+filtered_data <- migration_data_detected %>%
+  filter(
+    new_connect == "new_server",
+    migration == "migrated", 
+    contains_test== FALSE,
+    a_nona_account == FALSE
+  )
+
+# Count per app_mode
+app_mode_counts <- filtered_data %>%
+  count(app_mode, sort = TRUE)
+
+# Total number of apps
+total_apps <- filtered_data %>%
+  summarise(total = n())
+
+# Display both
+#list(app_mode_counts = app_mode_counts, total_apps = total_apps)
+```
+
+```{r, old-server-excl-testapps-accounts, results='hide'}
+#| echo: false
+#| message: false
+#| warning: false
+
+filtered_data_old <- migration_data_detected %>%
+  dplyr::filter(
+    old_connect == "old_server",
+    contains_test == FALSE,
+    a_nona_account == FALSE
+  )
+
+# Count per app_mode
+old_app_mode_counts <- filtered_data_old %>%
+  dplyr::count(app_mode, sort = TRUE)
+
+# Total number of apps
+old_total_apps <- filtered_data_old %>%
+  dplyr::summarise(total = n())
+
+# Display both
+list(old_app_mode_counts = old_app_mode_counts, old_total_apps = old_total_apps, app_mode_counts = app_mode_counts, total_apps = total_apps)
+
+# Combine old and new app mode counts
+combined_counts <- dplyr::full_join(
+  dplyr::rename(old_app_mode_counts, old_count = n),
+  dplyr::rename(app_mode_counts, new_count = n),
+  by = "app_mode"
+) %>%
+  tidyr::replace_na(list(old_count = 0, new_count = 0)) %>%
+  dplyr::mutate(
+    percent_migration = dplyr::case_when(
+      old_count == 0 ~ NA_real_,  # Avoid divide-by-zero
+      TRUE ~ (new_count / old_count) * 100
+    )
+  )
+
+# Add total row
+grand_totals <- tibble::tibble(
+  app_mode = "GRAND TOTAL",
+  old_count = old_total_apps$total,
+  new_count = total_apps$total,
+  percent_migration = ceiling((total_apps$total / old_total_apps$total) * 100
+))
+
+# Final table data
+final_table <- dplyr::bind_rows(combined_counts, grand_totals)
+final_table
+
+
+
+
+```
+
+```{r, newserver-server-testapps-non_accounts, results='hide'}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Filter old server apps (excluding test and nona)
+filtered_data_old <- migration_data_detected %>%
+  dplyr::filter(
+    old_connect == "old_server",
+    contains_test == FALSE,
+    a_nona_account == FALSE
+  )
+
+# Filter migrated apps
+filtered_data_migrated <- migration_data_detected %>%
+  dplyr::filter(
+    migration == "migrated",
+    contains_test == FALSE,
+    a_nona_account == FALSE
+  )
+
+# Filter new apps
+filtered_data_new <- migration_data_detected %>%
+  dplyr::filter(
+    new_connect == "new_server",
+    migration == "new app",
+    contains_test == FALSE,
+    a_nona_account == FALSE
+  )
+
+# Count per app_mode
+old_counts <- filtered_data_old %>% 
+  dplyr::count(app_mode, name = "old_count", sort = TRUE)
+
+migrated_counts <- filtered_data_migrated %>% 
+  dplyr::count(app_mode, name = "migrated_count")
+
+new_counts <- filtered_data_new %>% dplyr::count(app_mode, name = "new_count")
+
+# Combine all counts
+combined <- old_counts %>%
+  dplyr::full_join(migrated_counts, by = "app_mode") %>%
+  dplyr::full_join(new_counts, by = "app_mode") %>%
+  tidyr::replace_na(list(old_count = 0, migrated_count = 0, new_count = 0)) %>%
+  dplyr::mutate(
+    total_migrated = migrated_count + new_count,
+    percent_migrated_total = dplyr::case_when(
+      old_count == 0 ~ NA_real_,
+      TRUE ~ (total_migrated / old_count) * 100
+    )
+  )
+
+# Add GRAND TOTAL row
+grand_totals <- tibble::tibble(
+  app_mode = "GRAND TOTAL",
+  old_count = sum(combined$old_count),
+  migrated_count = sum(combined$migrated_count),
+  new_count = sum(combined$new_count),
+  total_migrated = sum(combined$total_migrated),
+  percent_migrated_total = ceiling((sum(combined$total_migrated) / sum(combined$old_count)) * 100))
+
+# Final table
+final_table_new_app <- dplyr::bind_rows(combined, grand_totals)
+
+# View result
+final_table_new_app
+
+
+
+
+```
+
+## 📊 Migration Summary
+
+Counting the migration of apps is a bit challenging due three facts:
+
+-   users either change the names of migrated apps or
+
+-   add similar names
+
+-   there are test apps
+
+Therefore different tables with different scenarios that affects the counts are considered.
+
+::: panel-tabset
+## Scenario 1
+
+###### Counting migrated apps - but excluding the new apps
+
+**Test apps are excluded** from counts in both Old Connect Server and New Connect Server.
+
+Names of the **migrated apps aren't exactly the same**. Thus, similarity score was used to match names; a score above 50% counts as the same app. Username and app type were also used alongside similarity score to determine whether the app is the same or similar from the one in Old Connect.
+
+**Total migration percentage:** `r final_table$percent_migration[final_table$app_mode == "GRAND TOTAL"]`% out of `r final_table$old_count[final_table$app_mode == "GRAND TOTAL"]`
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Build GT table
+migration_table <- gt::gt(final_table, rowname_col = "app_mode") %>%
+  gt::tab_header(
+    title = gt::md("📊 **App Mode Migration: New vs Old Server**")
+  ) %>%
+  gt::fmt_number(
+    columns = gt::vars(old_count, new_count),
+    decimals = 0,
+    use_seps = TRUE
+  ) %>%
+  gt::fmt_number(
+    columns = gt::vars(percent_migration),
+    decimals = 1,
+    use_seps = TRUE,
+    suffixing = "%"
+  ) %>%
+  gt::cols_label(
+    old_count = "Old Server",
+    new_count = "New Server",
+    percent_migration = "% Percent"
+  ) %>%
+  gt::cols_align(align = "center", columns = gt::everything()) %>%
+  gt::data_color(
+    columns = gt::vars(old_count, new_count, percent_migration),
+    colors = scales::col_numeric(
+      palette = paletteer::paletteer_d("ggsci::red_material") %>% as.character(),
+      domain = NULL
+    ),
+    alpha = 0.8
+  ) %>%
+  gt::tab_footnote(
+    footnote = "Test apps are excluded from counts in both Old Server and New Server.",
+    locations = gt::cells_title(groups = "title")
+  ) %>%
+  gt::tab_footnote(
+    footnote = "Apps in Old Connect Server might have different names compared to those in New Connect Server. Similarity score was used to match names; a score above 50% counts as the same app. Username and app_mode were also used to identify migrated apps.",
+    locations = gt::cells_column_labels(columns = "percent_migration")
+  ) %>%
+  gt::tab_source_note(
+    source_note = "For internal purposes only."
+  ) %>%
+  gt::tab_options(
+    heading.background.color = "#EFFBFC",
+    column_labels.background.color = "#EFFBFC",
+    table.font.color = "#323232",
+    table_body.hlines.color = "#989898",
+    table_body.border.top.color = "#989898",
+    heading.border.bottom.color = "#989898",
+    table.width = "70%"
+  ) %>%
+  gt::opt_all_caps()
+
+migration_table
+write.csv(migration_table, "data/migration_summary.csv", row.names = FALSE)
+```
+
+[⬇️ Download Migration Summary CSV](data/migration_summary.csv)
+
+## Scenario 2
+
+##### Adding the new apps alongside migrated apps
+
+**New apps (under different names) appear to be published** .
+
+**Test apps are excluded** from counts in both Old Connect Server and New Connect Server.
+
+Names of the **migrated apps aren't exactly the same**. Thus, similarity score was used to match names; a score above 50% counts as the same app. Username and app type were also used alongside similarity score to determine whether the app is the same or similar from the one in Old Connect.
+
+**Total migration percentage:** `r  final_table_new_app$percent_migrated_total[final_table_new_app$app_mode == "GRAND TOTAL"]`% out of `r final_table_new_app$old_count[final_table_new_app$app_mode == "GRAND TOTAL"]`
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Build GT table with new app and migrated columns
+migration_table_new_app <- gt::gt(final_table_new_app, rowname_col = "app_mode") %>%
+  gt::tab_header(
+    title = gt::md("📊 **App Mode Migration: New vs Old Server**")
+  ) %>%
+  gt::fmt_number(
+    columns = gt::vars(old_count, migrated_count, new_count, total_migrated),
+    decimals = 0,
+    use_seps = TRUE
+  ) %>%
+  gt::fmt_number(
+    columns = gt::vars(percent_migrated_total),
+    decimals = 1,
+    use_seps = TRUE,
+    suffixing = "%"
+  ) %>%
+  gt::cols_label(
+    old_count = "Old Server",
+    migrated_count = "Migrated Apps",
+    new_count = "New Apps",
+    total_migrated = "Total",
+    percent_migrated_total = "% Percent"
+  ) %>%
+  gt::cols_align(align = "center", columns = gt::everything()) %>%
+  gt::data_color(
+    columns = gt::vars(old_count, migrated_count, new_count, total_migrated, percent_migrated_total),
+    colors = scales::col_numeric(
+      palette = paletteer::paletteer_d("ggsci::red_material") %>% as.character(),
+      domain = NULL
+    ),
+    alpha = 0.8
+  ) %>%
+  gt::tab_footnote(
+    footnote = "Test apps are excluded from counts in both Old Server and New Server.",
+    locations = gt::cells_title(groups = "title")
+  ) %>%
+  gt::tab_footnote(
+    footnote = "Apps in Old Connect Server might have different names compared to those in New Connect Server. Similarity score was used to match names; a score above 50% counts as the same app. Username and app_mode were also used to identify migrated apps.",
+    locations = gt::cells_column_labels(columns = "percent_migrated_total")
+  ) %>%
+  gt::tab_source_note(
+    source_note = "For internal purposes only."
+  ) %>%
+  gt::tab_options(
+    heading.background.color = "#EFFBFC",
+    column_labels.background.color = "#EFFBFC",
+    table.font.color = "#323232",
+    table_body.hlines.color = "#989898",
+    table_body.border.top.color = "#989898",
+    heading.border.bottom.color = "#989898",
+    table.width = "70%"
+  ) %>%
+  gt::opt_all_caps()
+
+migration_table_new_app
+write.csv(migration_table_new_app, "data/migration_table_new_appy.csv", row.names = FALSE)
+```
+:::
