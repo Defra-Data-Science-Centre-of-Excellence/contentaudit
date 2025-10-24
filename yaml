@@ -6,6 +6,4 @@ server:
 port: 5555
 execute:
   echo: false
-dependencies:
-  - github::gabrielburceadefra/contentaudit
 ---
