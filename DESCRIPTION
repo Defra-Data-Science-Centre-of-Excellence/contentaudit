@@ -20,8 +20,8 @@ Imports:
     shiny,
     tidyr,
     toastui
-URL: https://github.com/gabrielburceadefra/contentaudit
-BugReports: https://github.com/gabrielburceadefra/contentaudit/issues
+URL: https://github.com/Defra-Data-Science-Centre-of-Excellence/contentaudit
+BugReports: https://github.com/Defra-Data-Science-Centre-of-Excellence/contentaudit/issues
 Suggests: 
     gt,
     paletteer
